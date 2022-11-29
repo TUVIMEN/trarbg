@@ -1,0 +1,126 @@
+#!/bin/sh
+# by Dominik Stanisław Suchora <suchora.dominik7@gmail.com>
+# License: GNU GPLv3
+
+by_name="filename"
+by_time="data"
+by_size="size"
+by_se="seeders"
+by_le="leechers"
+
+SORT=""
+PAGE=1
+SEARCH=""
+REVERSE="DESC"
+DOMAIN="https://rargb.to"
+DELIM="\t"
+CATEGORIES=""
+
+C_LE="31"
+C_SE="32"
+C_SIZE="33"
+C_UPLOADER="35"
+C_TIME="36"
+C_NAME="39"
+COLOR=1
+
+alias ucurl='curl -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) QtWebEngine/5.15.2 Chrome/87.0.4280.144 Safari/537.36" -H "Accept-Encoding: gzip, deflate" --compressed'
+
+while [ $# -gt 0 ]
+do
+  case "$1" in
+    -s|--sort)
+      case "$2" in
+        name) SORT="$by_name";;
+        size) SORT="$by_size";;
+        time) SORT="$by_time";;
+        se) SORT="$by_se";;
+        le) SORT="$by_le";;
+      esac
+      shift 2
+      ;;
+    -h|--help)
+        NAME="$(basename "$0")"
+        printf "%s [OPTION]... [PATTERN]\nSearch for PATTERN in rarbg.\nExample: %s -s size -p 2 'archlinux'\n\n" "$NAME" "$NAME"
+        printf "Options:\n  -s,  --sort TYPE\t\tsort using TYPE that can be: name, size, time, se, le\n"
+        printf "  -c,  --categories CATEGORIES\tsearch using CATEGORIES that can be: movies, anime, xxx, tv, apps, games, doc, music, other which can be separated by common delimiters\n"
+        printf "  -r,  --reverse\t\tsort in reverse\n"
+        printf "  -d,  --domain DOMAIN\t\tset domain to DOMAIN\n"
+        printf "  -D,  --delimiter DELIM\tset delimiter to DELIM\n"
+        printf "  -p,  --page NUM\t\tshow page at NUM\n"
+        printf "  -C,  --no-color\t\tdisable coloring of output\n"
+        printf "  -h,  --help\t\t\tshow help\n"
+        printf "\nMagnet link will be copied via xclip.\n"
+        exit 0
+        ;;
+    -C|--no-color)
+        COLOR=0
+        shift;;
+    -c|--categories)
+        CATEGORIES=$(echo "$2" | sed -E 's/^/\&category[]=/; s/(,|\/|-|\+|\|)/\&category[]=/g')
+        shift 2
+        ;;
+    -r|--reverse)
+        REVERSE="ASC"
+        shift
+        ;;
+    -d|--domain)
+        DOMAIN="$2"
+        shift 2
+        ;;
+    -D|--delimiter)
+        DELIM="$2"
+        shift 2;;
+    -p|--page)
+        PAGE="$2"
+        shift 2
+        ;;
+    *)
+      SEARCH="$1"
+      shift
+      ;;
+  esac
+done
+
+SEARCHP=$(echo "$SEARCH" | sed 's/+/%2B/g; s/;/%3B/g; s/\//%2F/g; s/?/%3F/g; s/\$/%24/g; s/@/%40/g; s/#/%23/g; s/%/%25/g; s/&/%26/g; s/ /+/g;')
+[ -n "$SORT" ] && SORT="&order=$SORT&by=$REVERSE"
+LINK="$DOMAIN/search/$PAGE/?search=$SEARCHP$SORT$CATEGORY"
+
+t1="$(mktemp)"
+t_time="$(mktemp)"
+t_size="$(mktemp)"
+t_se="$(mktemp)"
+t_le="$(mktemp)"
+t_name="$(mktemp)"
+t_link="$(mktemp)"
+t_uploader="$(mktemp)"
+trap 'rm "$t1" "$t_name" "$t_link" "$t_se" "$t_le" "$t_time" "$t_size" "$t_uploader"' EXIT
+
+ucurl -s -L -g "$LINK" | hgrep 'tr +class="lista2"; td' > "$t1"
+hgrep 'td; a +title @p"'"$DOMAIN"'%(href)a\n"' "$t1" > "$t_link"
+hgrep 'td; a +title @p"%i\n"' "$t1" > "$t_name"
+hgrep 'font +color @p"%i\n"' "$t1" > "$t_se"
+hgrep 'td +class="lista" +width="50px" @M"<" @p"%i\n"' "$t1" > "$t_le"
+hgrep 'td +class="lista" +width="150px" @M"<" @p"%i\n"' "$t1" > "$t_time"
+hgrep 'td +class="lista" +width="100px" @p"%i\n"' "$t1" > "$t_size"
+hgrep 'td +class="lista" -width +align="center" @p"%i\n"' "$t1" > "$t_uploader"
+
+color_lines() {
+    sed "s/^/\x1b[$1m/; s/$/\x1b[0m/" "$2" > "$3"
+    cp "$3" "$2"
+}
+
+if [ "$COLOR" -eq 1 ]
+then
+    color_lines "$C_SIZE" "$t_size" "$t1"
+    color_lines "$C_NAME" "$t_name" "$t1"
+    color_lines "$C_LE" "$t_le" "$t1"
+    color_lines "$C_SE" "$t_se" "$t1"
+    color_lines "$C_UPLOADER" "$t_uploader" "$t1"
+    color_lines "$C_TIME" "$t_time" "$t1"
+fi
+
+paste -d "$DELIM" "$t_name" "$t_time" "$t_size" "$t_se" "$t_le" "$t_uploader" | nl
+printf 'num> '
+read -r NUMBER
+[ "$NUMBER" -gt 0 ] && ucurl -g -s "$(sed "${NUMBER}q;d" "$t_link")" | grep -oE -m 1 'magnet:\?[^"]+' | tee /dev/stderr | xclip -sel clip
