@@ -1,4 +1,5 @@
 # trarbg
+
 A shell script for searching torrents on RARBG.
 
 ![example](example.gif)
@@ -13,19 +14,19 @@ A shell script for searching torrents on RARBG.
 
 ## Usage
 
-Just type 'trarbg "your search"', choose what you want and the magnet link will be copied to your clipboard.
+Just type 'trarbg your search', choose what you want and the magnet link will be copied to your clipboard.
 
 Search for the biggest linux isos
 
-    trarbg -s size 'linux iso'
+    trarbg -s size linux iso
 
 Search for the smallest linux isos
 
-    trarbg -r -s size -p 2 'linux iso'
+    trarbg -r -s size -p 2 linux iso
 
 Search for the most seeded linux isos on second page
 
-    trarbg -s se -p 2 'linux iso'
+    trarbg -s se -p 2 linux iso
 
 Search different domain for linux isos and change delimiter to space
 

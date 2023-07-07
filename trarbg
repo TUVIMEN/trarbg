@@ -2,13 +2,7 @@
 # by Dominik Stanisław Suchora <suchora.dominik7@gmail.com>
 # License: GNU GPLv3
 
-by_name="filename"
-by_time="data"
-by_size="size"
-by_se="seeders"
-by_le="leechers"
-
-SORT=""
+SORT="" #default
 PAGE=1
 SEARCH=""
 REVERSE="DESC"
@@ -31,11 +25,11 @@ do
   case "$1" in
     -s|--sort)
       case "$2" in
-        name) SORT="$by_name";;
-        size) SORT="$by_size";;
-        time) SORT="$by_time";;
-        se) SORT="$by_se";;
-        le) SORT="$by_le";;
+        name) SORT='filename';;
+        size) SORT='date';;
+        time) SORT='size';;
+        se) SORT='seeders';;
+        le) SORT='leechers';;
       esac
       shift 2
       ;;
@@ -76,9 +70,13 @@ do
         shift 2
         ;;
     *)
-      SEARCH="$1"
-      shift
-      ;;
+        if [ -z "$SEARCH" ]
+        then
+          SEARCH="$1"
+        else
+          SEARCH="$SEARCH $1"
+        fi
+        shift;;
   esac
 done
 
@@ -86,41 +84,48 @@ SEARCHP=$(echo "$SEARCH" | sed 's/+/%2B/g; s/;/%3B/g; s/\//%2F/g; s/?/%3F/g; s/\
 [ -n "$SORT" ] && SORT="&order=$SORT&by=$REVERSE"
 LINK="$DOMAIN/search/$PAGE/?search=$SEARCHP$SORT$CATEGORY"
 
-t1="$(mktemp)"
-t_time="$(mktemp)"
-t_size="$(mktemp)"
-t_se="$(mktemp)"
-t_le="$(mktemp)"
-t_name="$(mktemp)"
-t_link="$(mktemp)"
-t_uploader="$(mktemp)"
-trap 'rm "$t1" "$t_name" "$t_link" "$t_se" "$t_le" "$t_time" "$t_size" "$t_uploader"' EXIT
+t1="$(ucurl -s -L -g "$LINK" | hgrep 'tr +class="lista2"; td')"
+links="$(echo "$t1" | hgrep 'td; a +title @p"'"$DOMAIN"'%(href)a\n"')" #links
+{
+echo "$t1" | hgrep 'td; a +title @p"%i\n"' #name"
+echo "$t1" | hgrep 'td +class="lista" +width="150px" @M"<" @p"%i\n"' #time"
+echo "$t1" | hgrep 'td +class="lista" +width="100px" @p"%i\n"' #size"
+echo "$t1" | hgrep 'font +color @p"%i\n"' #se"
+echo "$t1" | hgrep 'td +class="lista" +width="50px" @M"<" @p"%i\n"' #le"
+echo "$t1" | hgrep 'td +class="lista" -width +align="center" @p"%i\n"' #uploader"
+} | awk 'function print_fields(lines,fields,step) {
+        colors[0] = '"$C_NAME"'
+        colors[1] = '"$C_TIME"'
+        colors[2] = '"$C_SIZE"'
+        colors[3] = '"$C_SE"'
+        colors[4] = '"$C_LE"'
+        colors[5] = '"$C_UPLOADER"'
+        ORS = ""
+        for (i = 0; i < step; i++) {
+            for (j = 0; j < fields; j++) {
+                if (j != 0)
+                    print "'"$DELIM"'"
+                if ('"$COLOR"')
+                    print "\033["colors[j]"m"lines[(step*j)+i]"\033[0m"
+                else
+                    print lines[(step*j)+i]
+            }
+            printf "\n"
+        }
+    }
 
-ucurl -s -L -g "$LINK" | hgrep 'tr +class="lista2"; td' > "$t1"
-hgrep 'td; a +title @p"'"$DOMAIN"'%(href)a\n"' "$t1" > "$t_link"
-hgrep 'td; a +title @p"%i\n"' "$t1" > "$t_name"
-hgrep 'font +color @p"%i\n"' "$t1" > "$t_se"
-hgrep 'td +class="lista" +width="50px" @M"<" @p"%i\n"' "$t1" > "$t_le"
-hgrep 'td +class="lista" +width="150px" @M"<" @p"%i\n"' "$t1" > "$t_time"
-hgrep 'td +class="lista" +width="100px" @p"%i\n"' "$t1" > "$t_size"
-hgrep 'td +class="lista" -width +align="center" @p"%i\n"' "$t1" > "$t_uploader"
+    BEGIN { l=0; fields = 6 }
+    { lines[l++]=$0 }
+    END {
+        if (l >= fields)
+        if (l%fields == 0) {
+                step = l/fields
+                print_fields(lines,fields,step)
+        } else
+            print "length of some data fields does not match the others"
+    }' | nl
 
-color_lines() {
-    sed "s/^/\x1b[$1m/; s/$/\x1b[0m/" "$2" > "$3"
-    cp "$3" "$2"
-}
-
-if [ "$COLOR" -eq 1 ]
-then
-    color_lines "$C_SIZE" "$t_size" "$t1"
-    color_lines "$C_NAME" "$t_name" "$t1"
-    color_lines "$C_LE" "$t_le" "$t1"
-    color_lines "$C_SE" "$t_se" "$t1"
-    color_lines "$C_UPLOADER" "$t_uploader" "$t1"
-    color_lines "$C_TIME" "$t_time" "$t1"
-fi
-
-paste -d "$DELIM" "$t_name" "$t_time" "$t_size" "$t_se" "$t_le" "$t_uploader" | nl
+[ -z "$links" ] && exit 1
 printf 'num> '
 read -r NUMBER
-[ "$NUMBER" -gt 0 ] && ucurl -g -s "$(sed "${NUMBER}q;d" "$t_link")" | grep -oE -m 1 'magnet:\?[^"]+' | tee /dev/stderr | xclip -sel clip
+[ "$NUMBER" -gt 0 ] && ucurl -g -s "$(echo "$links" | sed "${NUMBER}q;d")" | grep -oE -m 1 'magnet:\?[^"]+' | tee /dev/stderr | xclip -sel clip
