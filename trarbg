@@ -82,7 +82,7 @@ done
 
 SEARCHP=$(echo "$SEARCH" | sed 's/+/%2B/g; s/;/%3B/g; s/\//%2F/g; s/?/%3F/g; s/\$/%24/g; s/@/%40/g; s/#/%23/g; s/%/%25/g; s/&/%26/g; s/ /+/g;')
 [ -n "$SORT" ] && SORT="&order=$SORT&by=$REVERSE"
-LINK="$DOMAIN/search/$PAGE/?search=$SEARCHP$SORT$CATEGORY"
+LINK="$DOMAIN/search/$PAGE/?search=$SEARCHP$SORT$CATEGORIES"
 
 t1="$(ucurl -s -L -g "$LINK" | hgrep 'tr +class="lista2"; td')"
 links="$(echo "$t1" | hgrep 'td; a +title @p"'"$DOMAIN"'%(href)a\n"')" #links
